@@ -8,7 +8,8 @@ import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.List;
 
-import com.amazonaws.kinesisvideo.parser.examples.KinesisVideoFrameViewer;
+import com.amazonaws.kinesisvideo.labeldetectionwebapp.JpaFrame;
+import com.amazonaws.kinesisvideo.labeldetectionwebapp.TimestampCollection;
 import com.amazonaws.kinesisvideo.parser.mkv.Frame;
 import com.amazonaws.kinesisvideo.parser.mkv.FrameProcessException;
 import com.amazonaws.kinesisvideo.parser.utilities.*;
@@ -19,6 +20,8 @@ import com.amazonaws.services.rekognition.model.Image;
 import com.amazonaws.services.rekognition.model.Label;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Range;
+
 import static com.amazonaws.kinesisvideo.parser.utilities.BufferedImageUtil.addTextToImage;
 
 
@@ -27,58 +30,73 @@ import javax.imageio.ImageIO;
 @Slf4j
 public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
 
-    //private final KinesisVideoFrameViewer kinesisVideoFrameViewer;
     private final int sampleRate;
     private Set<String> labels;
+    private Map<JpaFrame, JpaFrame> frames;
+    private Map<String, TimestampCollection> labelToTimestamps;
+    private List<JpaFrame> framesInTask = new ArrayList<>();
+    private long frameNumber;
 
-    private int frame_no;
-
-    private H264ImageDetectionBoundingBoxSaver(final int sampleRate, Set<String> labels) {
-        //super(kinesisVideoFrameViewer);
-        //this.kinesisVideoFrameViewer = kinesisVideoFrameViewer;
+    private H264ImageDetectionBoundingBoxSaver(final int sampleRate, Set<String> labels, Map<JpaFrame, JpaFrame> frames, Map<String, TimestampCollection> labelToTimestamps) {
         this.sampleRate = sampleRate;
         this.labels = labels;
+        this.frames = frames;
+        this.labelToTimestamps = labelToTimestamps;
     }
 
-    public static H264ImageDetectionBoundingBoxSaver create(final int sampleRate, Set<String> labels) {
-        return new H264ImageDetectionBoundingBoxSaver(sampleRate, labels);
+    public static H264ImageDetectionBoundingBoxSaver create(final int sampleRate, Set<String> labels, Map<JpaFrame, JpaFrame> frames, Map<String, TimestampCollection> labelToTimestamps) {
+        return new H264ImageDetectionBoundingBoxSaver(sampleRate, labels, frames, labelToTimestamps);
     }
 
     @Override
     public void process(Frame frame, MkvTrackMetadata trackMetadata, Optional<FragmentMetadata> fragmentMetadata,
                         Optional<FragmentMetadataVisitor.MkvTagProcessor> tagProcessor) throws FrameProcessException {
 
-        boolean isKeyFrame = frame.isKeyFrame();
         BufferedImage bufferedImage = decodeH264Frame(frame, trackMetadata);
+        //log.info("Frame timecode is {}", frame.getTimeCode());
 
         /* Only send key frames to Rekognition */
         if (sampleRate == 0) {
-            if (isKeyFrame) {
-                saveFrame(bufferedImage);
+            if (frame.isKeyFrame()) {
+                saveFrame(bufferedImage, frameNumber);
             }
         }
         else {
             /* Only send to Rekognition every N frames */
-            if ((frame_no % sampleRate) == 0) {
-                saveFrame(bufferedImage);
+            if ((frameNumber % sampleRate) == 0) {
+                saveFrame(bufferedImage, frameNumber);
             }
-            frame_no++;
+            frameNumber++;
         }
+
     }
 
-    public void saveFrame(final BufferedImage bufferedImage) {
+    public void saveFrame(final BufferedImage bufferedImage, long frameNumber) {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
         try {
             ImageIO.write(bufferedImage, "png", outputStream);
             ByteBuffer imageBytes = ByteBuffer.wrap(outputStream.toByteArray());
-            List<BoundingBox> boundingBoxes = obtainBoundingBoxes(imageBytes, bufferedImage);
+            List<BoundingBox> boundingBoxes = new ArrayList<>();
+            List<String> labelsInFrame = sendToRekognition(imageBytes, bufferedImage, boundingBoxes);
 
 
             for (BoundingBox boundingBox: boundingBoxes) {
                 addBoundingBoxToImage(bufferedImage, boundingBox);
             }
-            //kinesisVideoFrameViewer.update(bufferedImage);
+            byte[] boundingBoxImageByteArray = toByteArrayAutoClosable(bufferedImage, "png");
+            JpaFrame jpaFrameToSave = new JpaFrame(boundingBoxImageByteArray, frameNumber);
+
+            for (String label: labelsInFrame) {
+                jpaFrameToSave.addLabel(label);
+                this.labelToTimestamps.get(label).addFrame(jpaFrameToSave);
+            }
+
+            this.frames.put(jpaFrameToSave, jpaFrameToSave);
+            this.framesInTask.add(jpaFrameToSave);
+
+
+
         }
         catch (IOException e) {
             log.warn("Error with png conversion", e);
@@ -86,8 +104,9 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
         }
     }
 
-    public List<BoundingBox> obtainBoundingBoxes(ByteBuffer imageBytes, BufferedImage bufferedImage) {
+    public List<String> sendToRekognition(ByteBuffer imageBytes, BufferedImage bufferedImage, List<BoundingBox> boundingBoxes) {
         AmazonRekognition rekognitionClient = AmazonRekognitionClientBuilder.defaultClient();
+        List<String> labelsInFrame = new ArrayList<>();
 
         DetectLabelsRequest request = new DetectLabelsRequest()
                 .withImage(new Image()
@@ -98,8 +117,6 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
         try {
             DetectLabelsResult result = rekognitionClient.detectLabels(request);
             List<Label> labels = result.getLabels();
-            List<BoundingBox> boundingBoxes = new ArrayList<>();
-
             int width = bufferedImage.getWidth();
             int height = bufferedImage.getHeight();
 
@@ -107,6 +124,8 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
             for (Label label: labels) {
                 System.out.println(label.getName() + ": " + label.getConfidence().toString());
                 this.labels.add(label.getName());
+                this.labelToTimestamps.putIfAbsent(label.getName(), new TimestampCollection());
+                labelsInFrame.add(label.getName());
             }
             System.out.println("----------------------");
 
@@ -118,8 +137,7 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
                     addTextToImage(bufferedImage, label.getName(), left, top);
                 }
             }
-
-            return boundingBoxes;
+            return labelsInFrame;
 
         } catch (AmazonRekognitionException e) {
             e.printStackTrace();
@@ -142,4 +160,16 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
 
         graphics.drawRect(left, top, bbWidth, bbHeight);
     }
+
+    private static byte[] toByteArrayAutoClosable(BufferedImage image, String type) throws IOException {
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()){
+            ImageIO.write(image, type, out);
+            return out.toByteArray();
+        }
+    }
+
+    public List<JpaFrame> getFramesInTask () {
+        return this.framesInTask;
+    }
+
 }

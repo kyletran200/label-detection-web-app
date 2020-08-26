@@ -1,27 +1,24 @@
 package com.amazonaws.kinesisvideo.labeldetectionwebapp.kvsservices;
 
-import java.awt.*;
-import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.amazonaws.auth.AWSCredentialsProvider;
+import com.amazonaws.kinesisvideo.labeldetectionwebapp.JpaFrame;
+import com.amazonaws.kinesisvideo.labeldetectionwebapp.FrameNumberCollection;
+import com.amazonaws.kinesisvideo.labeldetectionwebapp.TimestampCollection;
 import com.amazonaws.kinesisvideo.parser.examples.GetMediaWorker;
 import com.amazonaws.kinesisvideo.parser.examples.KinesisVideoCommon;
 import com.amazonaws.kinesisvideo.parser.examples.PutMediaWorker;
 import com.amazonaws.kinesisvideo.parser.examples.StreamOps;
 import com.amazonaws.kinesisvideo.parser.utilities.FragmentMetadataVisitor;
 import com.amazonaws.kinesisvideo.parser.utilities.FrameVisitor;
-import com.amazonaws.kinesisvideo.parser.utilities.H264FrameRenderer;
 import com.amazonaws.regions.Regions;
-import com.amazonaws.services.dynamodbv2.model.Get;
-import com.amazonaws.services.dynamodbv2.model.Put;
 import com.amazonaws.services.kinesisvideo.model.StartSelector;
 import com.amazonaws.services.kinesisvideo.model.StartSelectorType;
 import lombok.Builder;
@@ -55,7 +52,7 @@ public class PutAndGetMedia extends KinesisVideoCommon {
 
         this.inputStream = inputStream;
         this.streamOps = new StreamOps(region, streamName, credentialsProvider);
-        this.executorService = Executors.newSingleThreadExecutor();
+        this.executorService = Executors.newFixedThreadPool(2);
         this.sampleRate = sampleRate;
     }
 
@@ -97,14 +94,18 @@ public class PutAndGetMedia extends KinesisVideoCommon {
     private static class GetMediaProcessingArguments {
         @Getter private final FrameVisitor frameVisitor;
         @Getter private Set<String> labels = new HashSet<>();
+        @Getter private Map<JpaFrame, JpaFrame> jpaFrames = new HashMap<>();
+        @Getter private Map<String, TimestampCollection> labelToTimestamps = new HashMap<>();
 
         GetMediaProcessingArguments(Optional<FragmentMetadataVisitor.MkvTagProcessor> tagProcessor, int sampleRate) {
-            this.frameVisitor = FrameVisitor.create(H264ImageDetectionBoundingBoxSaver.create(sampleRate, getLabels()));
+            this.frameVisitor = FrameVisitor.create(H264ImageDetectionBoundingBoxSaver.create(sampleRate, getLabels(), getJpaFrames(), getLabelToTimestamps()));
         }
     }
 
     public Set<String> getLabels() {
         return getMediaProcessingArguments.getLabels();
     }
+
+    public Map<JpaFrame, JpaFrame> getFrames() { return getMediaProcessingArguments.getJpaFrames(); }
 
 }

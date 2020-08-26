@@ -1,26 +1,17 @@
 package com.amazonaws.kinesisvideo.labeldetectionwebapp;
 
 import java.io.*;
-import java.net.URI;
-import java.time.Instant;
-import java.util.Date;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-import com.amazonaws.kinesisvideo.demoapp.auth.AuthHelper;
 import com.amazonaws.kinesisvideo.labeldetectionwebapp.exceptions.VideoNotFoundException;
 import com.amazonaws.kinesisvideo.labeldetectionwebapp.kvsservices.PutAndGetMedia;
-import com.amazonaws.kinesisvideo.parser.examples.PutMediaWorker;
 import com.amazonaws.regions.Regions;
-import com.amazonaws.services.kinesisvideo.*;
-import com.amazonaws.services.kinesisvideo.model.AckEvent;
-import com.amazonaws.services.kinesisvideo.model.FragmentTimecodeType;
-import com.amazonaws.services.kinesisvideo.model.GetDataEndpointRequest;
-import com.amazonaws.services.kinesisvideo.model.PutMediaRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 
+@Slf4j
 @RestController
 @CrossOrigin("*")
 public class VideoController {
@@ -49,7 +40,26 @@ public class VideoController {
 
         if (videoToUpdate.getLabels().size() == 0) {
 
-            File f = new File("/Users/kyltran/KVSProject/label-detection-web-app/src/main/resources/videosamples/clusters.mkv");
+            String filePath = "/Users/kyltran/KVSProject/label-detection-web-app/src/main/resources/videosamples/";
+            String videoName;
+
+            switch(id.intValue()) {
+                case 1:
+                    videoName = "bezos_vogels.mkv";
+                    break;
+                case 2:
+                    videoName = "clusters.mkv";
+                    break;
+                case 3:
+                    videoName = "video.mkv";
+                    break;
+                default:
+                    videoName="";
+                    break;
+            }
+
+
+            File f = new File(filePath + videoName);
             InputStream inputStream = new FileInputStream(f);
 
 
@@ -66,7 +76,22 @@ public class VideoController {
             for (String label : putAndGetMedia.getLabels()) {
                 videoToUpdate.addLabel(label);
             }
+
+            System.out.println("NUMBER OF FRAMES IS: ");
+            System.out.println(putAndGetMedia.getFrames().size());
+            /*
+            for (JpaFrame jpaFrame : putAndGetMedia.getFrames()) {
+                videoToUpdate.addFrame(jpaFrame);
+            }*/
+            putAndGetMedia.getFrames().forEach((k, v) -> videoToUpdate.addFrame(k));
+
+            /*
+            videoToUpdate.copyFrameNumToFrame(putAndGetMedia.getFrameNumToFrame());
+            videoToUpdate.copyLabelToFrame(putAndGetMedia.getLabelToFrames());
+            */
+            log.info("Size of frames map is: {}", putAndGetMedia.getFrames().size());
             videoRepository.save(videoToUpdate);
+
         }
         return videoToUpdate;
     }

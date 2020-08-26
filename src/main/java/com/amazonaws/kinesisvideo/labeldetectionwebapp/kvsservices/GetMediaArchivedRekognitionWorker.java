@@ -3,16 +3,15 @@ package com.amazonaws.kinesisvideo.labeldetectionwebapp.kvsservices;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.client.builder.AwsClientBuilder;
 
+import com.amazonaws.kinesisvideo.labeldetectionwebapp.JpaFrame;
 import com.amazonaws.kinesisvideo.parser.ebml.InputStreamParserByteSource;
 import com.amazonaws.kinesisvideo.parser.examples.KinesisVideoCommon;
-import com.amazonaws.kinesisvideo.parser.mkv.MkvElement;
 import com.amazonaws.kinesisvideo.parser.mkv.MkvElementVisitException;
 import com.amazonaws.kinesisvideo.parser.mkv.MkvElementVisitor;
 import com.amazonaws.kinesisvideo.parser.mkv.StreamingMkvReader;
@@ -27,12 +26,14 @@ import lombok.extern.slf4j.Slf4j;
 /* This worker retrieves all fragments within the specified Time Range from a specified Kinesis Video Stream and puts them in a list */
 
 @Slf4j
-public class GetMediaArchivedRekognitionWorker extends KinesisVideoCommon implements Runnable {
+public class GetMediaArchivedRekognitionWorker extends KinesisVideoCommon implements Callable {
     private FragmentSelector fragmentSelector;
     private final AmazonKinesisVideoArchivedMedia amazonKinesisVideoArchivedMediaListFragments;
     private final AmazonKinesisVideoArchivedMedia amazonKinesisVideoArchivedMediaGetMediaForFragmentList;
     private MkvElementVisitor elementVisitor;
-    private List<String> fragment_numbers = Collections.synchronizedList(new ArrayList<String>());
+    private H264ImageDetectionBoundingBoxSaver h264ImageDetectionBoundingBoxSaver;
+    private final long fragmentsPerRequest = 100;
+    private AtomicLong playbackLength;
 
     public GetMediaArchivedRekognitionWorker(final String streamName,
                                              final AWSCredentialsProvider awsCredentialsProvider,
@@ -40,10 +41,14 @@ public class GetMediaArchivedRekognitionWorker extends KinesisVideoCommon implem
                                              final String getMediaForFragmentListEndPoint,
                                              final Regions region,
                                              final FragmentSelector fragmentSelector,
-                                             final MkvElementVisitor elementVisitor) {
+                                             final MkvElementVisitor elementVisitor,
+                                             final H264ImageDetectionBoundingBoxSaver h264ImageDetectionBoundingBoxSaver,
+                                             final AtomicLong playbackLength) {
         super(region, awsCredentialsProvider, streamName);
         this.fragmentSelector = fragmentSelector;
         this.elementVisitor = elementVisitor;
+        this.playbackLength = playbackLength;
+        this.h264ImageDetectionBoundingBoxSaver = h264ImageDetectionBoundingBoxSaver;
 
         amazonKinesisVideoArchivedMediaListFragments = AmazonKinesisVideoArchivedMediaClient
                 .builder()
@@ -65,24 +70,26 @@ public class GetMediaArchivedRekognitionWorker extends KinesisVideoCommon implem
                                                            final AmazonKinesisVideo amazonKinesisVideo,
                                                            final FragmentSelector fragmentSelector,
                                                            final MkvElementVisitor elementVisitor,
+                                                           final H264ImageDetectionBoundingBoxSaver h264ImageDetectionBoundingBoxSaver,
                                                            final String listFragmentsEndpoint,
-                                                           final String getMediaForFragmentListEndpoint)
+                                                           final String getMediaForFragmentListEndpoint,
+                                                           final AtomicLong playbackLength)
     {
 
         return new GetMediaArchivedRekognitionWorker(
-                streamName, awsCredentialsProvider, listFragmentsEndpoint, getMediaForFragmentListEndpoint, region, fragmentSelector, elementVisitor);
+                streamName, awsCredentialsProvider, listFragmentsEndpoint, getMediaForFragmentListEndpoint, region, fragmentSelector, elementVisitor, h264ImageDetectionBoundingBoxSaver, playbackLength);
     }
 
     @Override
-    public void run() {
+    public List<JpaFrame> call() {
         try {
             log.info("Start ListFragment worker on stream {}", streamName);
 
             /* ---------------------------- LIST FRAGMENTS SECTION ---------------------------- */
             ListFragmentsRequest listFragmentsRequest = new ListFragmentsRequest()
-                    .withStreamName(streamName).withFragmentSelector(fragmentSelector).withMaxResults((long) 100);
+                    .withStreamName(streamName).withFragmentSelector(fragmentSelector).withMaxResults(fragmentsPerRequest);
 
-            System.out.println(listFragmentsRequest.toString());
+            log.info(listFragmentsRequest.toString());
 
             ListFragmentsResult listFragmentsResult = amazonKinesisVideoArchivedMediaListFragments.listFragments(listFragmentsRequest);
 
@@ -92,8 +99,12 @@ public class GetMediaArchivedRekognitionWorker extends KinesisVideoCommon implem
                     listFragmentsResult.getSdkHttpMetadata().getHttpStatusCode(),
                     listFragmentsResult.getSdkResponseMetadata().getRequestId());
 
-            List<Fragment> fragments_list = listFragmentsResult.getFragments();
 
+            List<String> fragmentNumbers = new ArrayList<>();
+            for (Fragment f: listFragmentsResult.getFragments()) {
+                fragmentNumbers.add(f.getFragmentNumber());
+                playbackLength.addAndGet(f.getFragmentLengthInMilliseconds());
+            }
 
             String nextToken = listFragmentsResult.getNextToken();
 
@@ -103,23 +114,19 @@ public class GetMediaArchivedRekognitionWorker extends KinesisVideoCommon implem
                         .withStreamName(streamName).withNextToken(nextToken);
                 listFragmentsResult = amazonKinesisVideoArchivedMediaListFragments.listFragments(listFragmentsRequest);
 
-                fragments_list = Stream.concat(fragments_list.stream(), listFragmentsResult.getFragments().stream()).collect(Collectors.toList());
+                for (Fragment f: listFragmentsResult.getFragments()) {
+                    fragmentNumbers.add(f.getFragmentNumber());
+                }
                 nextToken = listFragmentsResult.getNextToken();
             }
 
-            //System.out.println("Fragments retrieved in " + Thread.currentThread().getName());
-            for (Fragment f : fragments_list) {
-                //System.out.println(f.getFragmentNumber());
-                fragment_numbers.add(f.getFragmentNumber());
-            }
-            Collections.sort(fragment_numbers);
-            //System.out.println("-------------------------------");
+            Collections.sort(fragmentNumbers);
 
             /* ------------------------- GET MEDIA SECTION ------------------------- */
 
-            if (fragment_numbers.size() > 0) {
+            if (fragmentNumbers.size() > 0) {
                 GetMediaForFragmentListRequest getMediaFragmentListRequest = new GetMediaForFragmentListRequest()
-                        .withFragments(fragment_numbers)
+                        .withFragments(fragmentNumbers)
                         .withStreamName(streamName);
 
                 GetMediaForFragmentListResult getMediaForFragmentListResult = amazonKinesisVideoArchivedMediaGetMediaForFragmentList.getMediaForFragmentList(getMediaFragmentListRequest);
@@ -130,17 +137,17 @@ public class GetMediaArchivedRekognitionWorker extends KinesisVideoCommon implem
                 try {
                     mkvStreamReader.apply(this.elementVisitor);
                 } catch (final MkvElementVisitException e) {
-                    log.error("Exception while accepting visitor {}", e);
-                    System.out.println("Exception while accepting visitor " + e.toString());
+                    log.warn("Exception while accepting visitor {}", e);
                 }
             }
 
         } catch (Throwable t) {
-            System.out.println("GetMediaArchivedRekognitionWorker failed in " + Thread.currentThread().getName());
-            log.error("Failure in GetMediaArchivedRekognitionWorker for streamName {} {}", streamName, t.toString());
+            log.error("Failure in GetMediaArchivedRekognitionWorker for streamName {} {} with timestamp range {}", streamName, t.toString(), fragmentSelector.getTimestampRange().toString());
+            t.printStackTrace();
             throw t;
         } finally {
             log.info("Exiting GetMediaArchivedRekognitionWorker for stream {}", streamName);
+            return this.h264ImageDetectionBoundingBoxSaver.getFramesInTask();
         }
     }
 }
