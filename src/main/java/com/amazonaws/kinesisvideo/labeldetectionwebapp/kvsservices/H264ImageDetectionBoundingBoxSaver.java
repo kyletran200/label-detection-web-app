@@ -20,7 +20,6 @@ import com.amazonaws.services.rekognition.model.Image;
 import com.amazonaws.services.rekognition.model.Label;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Range;
 
 import static com.amazonaws.kinesisvideo.parser.utilities.BufferedImageUtil.addTextToImage;
 
@@ -68,7 +67,6 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
             }
             frameNumber++;
         }
-
     }
 
     public void saveFrame(final BufferedImage bufferedImage, long frameNumber) {
@@ -79,7 +77,6 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
             ByteBuffer imageBytes = ByteBuffer.wrap(outputStream.toByteArray());
             List<BoundingBox> boundingBoxes = new ArrayList<>();
             List<String> labelsInFrame = sendToRekognition(imageBytes, bufferedImage, boundingBoxes);
-
 
             for (BoundingBox boundingBox: boundingBoxes) {
                 addBoundingBoxToImage(bufferedImage, boundingBox);
@@ -94,8 +91,6 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
 
             this.frames.put(jpaFrameToSave, jpaFrameToSave);
             this.framesInTask.add(jpaFrameToSave);
-
-
 
         }
         catch (IOException e) {
@@ -120,14 +115,14 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
             int width = bufferedImage.getWidth();
             int height = bufferedImage.getHeight();
 
-            System.out.println("Detected Labels:");
+            log.info("Detected Labels:");
             for (Label label: labels) {
-                System.out.println(label.getName() + ": " + label.getConfidence().toString());
+                log.info(label.getName() + ": " + label.getConfidence().toString());
                 this.labels.add(label.getName());
                 this.labelToTimestamps.putIfAbsent(label.getName(), new TimestampCollection());
                 labelsInFrame.add(label.getName());
             }
-            System.out.println("----------------------");
+            log.info("----------------------");
 
             for (Label label: labels) {
                 for (Instance instance: label.getInstances()) {

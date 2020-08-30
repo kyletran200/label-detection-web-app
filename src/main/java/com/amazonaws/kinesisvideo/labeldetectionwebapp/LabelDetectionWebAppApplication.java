@@ -10,7 +10,5 @@ public class LabelDetectionWebAppApplication {
 
 	public static void main(String[] args) throws IOException, InterruptedException {
 		SpringApplication.run(LabelDetectionWebAppApplication.class, args);
-
 	}
-
 }

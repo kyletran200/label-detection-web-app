@@ -1,16 +1,12 @@
 import React, {useState, useEffect} from 'react';
 import {useParams} from "react-router-dom";
-import Slider from 'react-slick';
-import "slick-carousel/slick/slick.css";
-import "slick-carousel/slick/slick-theme.css";
 import axios from "axios";
-import {Button, DropdownButton, Dropdown, Carousel} from "react-bootstrap";
+import {DropdownButton, Dropdown,} from "react-bootstrap";
 import LoadingIndicator from "./LoadingIndicator.js";
-import LabelButton from "./LabelButton.js";
 import DropdownLabel from "./DropdownLabel.js";
-import TimestampButtons from "./TimestampButtons.js";
 import ControlledCarousel from "./ControlledCarousel.js";
-
+import DropdownTimestamps from "./DropdownTimestamps";
+import "./styles.css";
 
 const Stream = () => {
     let {id} = useParams();
@@ -19,6 +15,7 @@ const Stream = () => {
 
     const [TimestampsDisplaying, setTimestampsDisplaying] = useState([]);
     const [carouselIndex, setCarouselIndex] = useState(0);
+    const [label, setLabel] = useState();
     
     const fetchStreamInfo = async () => {
       try {
@@ -59,7 +56,11 @@ const Stream = () => {
         timestampCollections = Object.values(labelToTimestamps);
         
         if (TimestampsDisplaying.length <= 0) {
-          setTimestampsDisplaying(new Array(labels.length).fill(false));  
+          var t = new Array(labels.length).fill(false)
+          t[0] = true;
+
+          setTimestampsDisplaying(t);  
+          setLabel(labels[0]);
         }    
     }
 
@@ -69,66 +70,41 @@ const Stream = () => {
     //console.log(TimestampsDisplaying);
     //console.log(labels);
     //console.log(timestampCollections);
-   
-    //console.log(labelToTimestamps);<Dropdown.Item>{label}</Dropdown.Item>
+    //console.log(labelToTimestamps);
   
     const handleLabelSelect = (index) => {
       let newArr = Array(TimestampsDisplaying.length).fill(false);
       newArr[index] = true;
       setTimestampsDisplaying(newArr);
+      setLabel(labels[index]);
     }
 
     const handleCarouselIndexChange = (index) => {
       setCarouselIndex(index);
     }
 
-    return (
-      <React.Fragment>
-        {loading ? <LoadingIndicator/> : <h1>Labels for {Stream.name}</h1>}
-        <DropdownButton id="dropdown-labels-button" title="Labels">
-          {labels && labels.map((label, index) => (
-            <DropdownLabel label={label} timestamps={timestampCollections} index={index} key={index} onClick={handleLabelSelect}></DropdownLabel>
-          ))}
-        </DropdownButton>
-        <React.Fragment>
-          {timestampCollections && timestampCollections.map((timestampCollection, index) => (
-            <TimestampButtons index={index} key={index} timestampsDisplaying={TimestampsDisplaying} labels={labels} timestampCollection={timestampCollection} timestamps={timestamps} onClick={handleCarouselIndexChange}></TimestampButtons>
-          ))}
-        </React.Fragment>
-        <h1></h1>
-        <ControlledCarousel frames={frames} index={carouselIndex} onSelect={handleCarouselIndexChange}>
-        </ControlledCarousel> 
-      </React.Fragment>
-    )
-  };
-  
-/*
   return (
-      <React.Fragment>
-        {loading ? <LoadingIndicator/> : <h1>Labels for {Stream.name}</h1>}
-        <DropdownButton id="dropdown-labels-button" title="Labels">
+    <React.Fragment>
+      {loading ? <LoadingIndicator/> : <h2>{Stream.name} Frame Viewer</h2>}
+      {loading ? null :
+      <div id="dropdown-wrapper">
+        <DropdownButton id="dropdown-labels-button" title="Labels" style={{margin:'7.5px'}}>
           {labels && labels.map((label, index) => (
             <DropdownLabel label={label} timestamps={timestampCollections} index={index} key={index} onClick={handleLabelSelect}></DropdownLabel>
           ))}
-        </DropdownButton>
-        <React.Fragment>
+        </DropdownButton> 
+        <DropdownButton id="dropdown-timestamps-button" title={"Frame timestamps for: " + label} class="dropdown" style={{margin:'7.5px'}} variant="secondary">  
           {timestampCollections && timestampCollections.map((timestampCollection, index) => (
-            <TimestampButtons index={index} key={index} timestampsDisplaying={TimestampsDisplaying} labels={labels} timestampCollection={timestampCollection}></TimestampButtons>
+            <DropdownTimestamps index={index} key={index} timestampsDisplaying={TimestampsDisplaying} labels={labels} timestampCollection={timestampCollection} timestamps={timestamps} onClick={handleCarouselIndexChange}></DropdownTimestamps>
           ))}
-        </React.Fragment>
-        <h1></h1>
-        <Carousel>
-            {frames && frames.map((frame, index) => (
-              <Carousel.Item key={index}>
-                <img src={`data:image/png;base64,${frame.imageBytes}`}/>
-                <Carousel.Caption>
-                  <h1>{frame.playbackTimestamp}</h1>
-                </Carousel.Caption>
-              </Carousel.Item>
-            ))}
-        </Carousel> 
-      </React.Fragment>
-    )
-  };*/
+        </DropdownButton>
+      </div>
+      }
+      <h1></h1>
+      <ControlledCarousel frames={frames} index={carouselIndex} onSelect={handleCarouselIndexChange}>
+      </ControlledCarousel> 
+    </React.Fragment>
+  )
+};
 
   export default Stream;

@@ -1,5 +1,7 @@
+import "./styles.css";
 import {Carousel} from "react-bootstrap"
-import React, {useState, useEffect} from 'react';
+import React from 'react';
+
 
 
 const ControlledCarousel = (props) => {

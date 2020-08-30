@@ -1,5 +1,5 @@
-import {Button, DropdownItem, Dropdown} from "react-bootstrap";
-import React, {useState, useEffect} from 'react';
+import {Dropdown} from "react-bootstrap";
+import React from 'react';
 
 const DropdownLabel = (props) => {
 

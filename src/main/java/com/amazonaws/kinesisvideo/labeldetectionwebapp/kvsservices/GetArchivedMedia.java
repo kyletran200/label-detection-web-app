@@ -26,9 +26,6 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class GetArchivedMedia extends KinesisVideoCommon {
 
-    //private final String startTimestamp;
-    //private final String endTimestamp;
-
     private final TimestampRange timestampRange;
 
     private final StreamOps streamOps;
@@ -36,17 +33,10 @@ public class GetArchivedMedia extends KinesisVideoCommon {
     private final int sampleRate;
     private int tasks;
 
-    private static final int FRAME_WIDTH=1280;
-    private static final int FRAME_HEIGHT=720;
-
     private final int awaitTerminationTime = 10800;
     private AtomicLong playbackLength = new AtomicLong();
 
     @Getter private Set<String> labels = Collections.synchronizedSet(new HashSet<>());
-
-    //@Getter private Map<Long, JpaFrame> frameNumToFrame = Collections.synchronizedMap(new HashMap<>());
-
-    //@Getter private Map<String, FrameNumberCollection> labelToFrames = Collections.synchronizedMap(new HashMap<>());
 
     @Getter private Map<String, TimestampCollection> labelToTimestamps = Collections.synchronizedMap(new HashMap<>());
 

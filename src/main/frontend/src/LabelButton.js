@@ -1,14 +1,6 @@
 import {Button} from "react-bootstrap";
 import React, {useState, useEffect} from 'react';
 
-/* 
-{isShowingTimestamps && Object.keys(props.timestamps).map((timestamp, index) => (
-            <div key={index}>
-                <h1>{timestamp}</h1>
-            </div>
-        ))} */
-
-/* {isShowingTimestamps ? <h1>Timestamps for {props.text}: {props.timestamps[props.index].id}</h1> : null} */
 
 const LabelButton = (props) => {
     const [isShowingTimestamps, setShowingTimestamps] = useState(false);

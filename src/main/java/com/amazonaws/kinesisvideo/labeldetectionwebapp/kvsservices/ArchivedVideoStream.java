@@ -34,8 +34,6 @@ public class ArchivedVideoStream {
     private String startTimestamp;
     private String endTimestamp;
     private int sampleRate;
-
-    private int tasks;
     private int threads;
 
     protected ArchivedVideoStream() {}

@@ -1,8 +1,8 @@
-import React, {useHistory, useState, useEffect, Component, Fragment} from 'react';
+import React, {useState, useEffect} from 'react';
 
-import {Card} from "react-bootstrap";
-import {Link, BrowserRouter as Router, Route, useParams} from "react-router-dom";
 import './App.css';
+import {Card, Carousel} from "react-bootstrap";
+import {Link} from "react-router-dom";
 import axios from "axios";
 
 const Streams = () => {
@@ -20,21 +20,23 @@ const Streams = () => {
     }, []);
 
     return (
-        <React.Fragment>
-            <h1>Archived Stream Segments</h1>
-            {streams.map((stream, index) => (
-                <React.Fragment key={index}>
-                    <Card style={{ width: '18rem' }}>
-                        <Card.Body>
-                            <Card.Title>{stream.name}</Card.Title>
-                            <Card.Text>Start Timestamp: {stream.startTimestamp}</Card.Text>
-                            <Card.Text>End Timestamp: {stream.endTimestamp}</Card.Text>
-                            <Link to={`/streams/${stream.id}`} className="btn btn-primary">View Rekgonized Images</Link>
-                        </Card.Body>
-                    </Card>
-                </React.Fragment>
-            ))}
-        </React.Fragment>
+      <React.Fragment>
+      <h1>Archived Stream Segments</h1>
+        <div class="stream-cards">
+              {streams.map((stream, index) => (
+                  <React.Fragment key={index}>
+                      <Card style={{ width: '18rem',margin: '35px'}}>
+                          <Card.Body>
+                              <Card.Title>{stream.name}</Card.Title>
+                              <Card.Text>Start Timestamp: {stream.startTimestamp}</Card.Text>
+                              <Card.Text>End Timestamp: {stream.endTimestamp}</Card.Text>
+                              <Link to={`/streams/${stream.id}`} className="btn btn-primary">View Rekgonized Images</Link>
+                          </Card.Body>
+                      </Card>
+                  </React.Fragment>
+              ))}
+        </div>
+      </React.Fragment>
     )
   };
 

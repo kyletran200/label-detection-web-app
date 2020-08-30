@@ -51,7 +51,6 @@ public class ArchivedVideoStreamController {
             String startTimestamp = streamToUpdate.getStartTimestamp();
             String endTimestamp = streamToUpdate.getEndTimestamp();
             String streamName = streamToUpdate.getName();
-            int tasks = streamToUpdate.getTasks();
             int threads = streamToUpdate.getThreads();
             int sampleRate = streamToUpdate.getSampleRate();
 
@@ -63,6 +62,10 @@ public class ArchivedVideoStreamController {
                 log.error(e.getMessage());
                 System.exit(1);
             }
+
+            long timeDuration = timestampRange.getEndTimestamp().getTime() - timestampRange.getStartTimestamp().getTime();
+            int tasks = (int) timeDuration / 10000;
+            log.info("Starting processing with {} tasks and {} threads on {}", tasks, threads, streamName);
 
             GetArchivedMedia getArchivedMedia = GetArchivedMedia.builder()
                     .region(Regions.US_WEST_2)
@@ -82,7 +85,6 @@ public class ArchivedVideoStreamController {
 
             getArchivedMedia.getLabelToTimestamps().forEach((k, v) -> streamToUpdate.addLabelAndTimestampCollection(k, v));
             getArchivedMedia.getFrames().forEach((k, v) -> streamToUpdate.addFrame(k));
-
 
             streamToUpdate.sortFrames();
             archivedVideoStreamsRepository.save(streamToUpdate);
