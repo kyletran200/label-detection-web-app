@@ -11,7 +11,6 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.kinesisvideo.labeldetectionwebapp.JpaFrame;
-import com.amazonaws.kinesisvideo.labeldetectionwebapp.FrameNumberCollection;
 import com.amazonaws.kinesisvideo.labeldetectionwebapp.TimestampCollection;
 import com.amazonaws.kinesisvideo.parser.examples.KinesisVideoCommon;
 import com.amazonaws.kinesisvideo.parser.examples.StreamOps;
@@ -27,7 +26,6 @@ import lombok.extern.slf4j.Slf4j;
 public class GetArchivedMedia extends KinesisVideoCommon {
 
     private final TimestampRange timestampRange;
-
     private final StreamOps streamOps;
     private final ExecutorService executorService;
     private final int sampleRate;
@@ -36,20 +34,23 @@ public class GetArchivedMedia extends KinesisVideoCommon {
     private final int awaitTerminationTime = 10800;
     private AtomicLong playbackLength = new AtomicLong();
 
-    @Getter private Set<String> labels = Collections.synchronizedSet(new HashSet<>());
+    @Getter
+    private Set<String> labels = Collections.synchronizedSet(new HashSet<>());
 
-    @Getter private Map<String, TimestampCollection> labelToTimestamps = Collections.synchronizedMap(new HashMap<>());
+    @Getter
+    private Map<String, TimestampCollection> labelToTimestamps = Collections.synchronizedMap(new HashMap<>());
 
-    @Getter private Map<JpaFrame, JpaFrame> frames = Collections.synchronizedMap(new HashMap<>());
+    @Getter
+    private Map<JpaFrame, JpaFrame> frames = Collections.synchronizedMap(new HashMap<>());
 
     @Builder
     private GetArchivedMedia(Regions region,
-                                                          String streamName,
-                                                          AWSCredentialsProvider awsCredentialsProvider,
-                                                          TimestampRange timestampRange,
-                                                          int sampleRate,
-                                                          int threads,
-                                                          int tasks) {
+                             String streamName,
+                             AWSCredentialsProvider awsCredentialsProvider,
+                             TimestampRange timestampRange,
+                             int sampleRate,
+                             int threads,
+                             int tasks) {
         super(region, awsCredentialsProvider, streamName);
         this.streamOps = new StreamOps(region, streamName, awsCredentialsProvider);
         this.executorService = Executors.newFixedThreadPool(threads);
@@ -58,7 +59,7 @@ public class GetArchivedMedia extends KinesisVideoCommon {
         this.tasks = tasks;
     }
 
-    public void execute() throws InterruptedException, IOException, ParseException, ExecutionException {
+    public void execute() throws InterruptedException, ParseException, ExecutionException {
 
         List<TimestampRange> timestampRanges = partitionTimeRange(timestampRange);
 
@@ -67,7 +68,7 @@ public class GetArchivedMedia extends KinesisVideoCommon {
 
         List<Future<List<JpaFrame>>> framesForEachTask = new ArrayList<>();
 
-        for (TimestampRange timestampRange: timestampRanges) {
+        for (TimestampRange timestampRange : timestampRanges) {
 
             log.info(timestampRange.toString());
 
@@ -101,13 +102,13 @@ public class GetArchivedMedia extends KinesisVideoCommon {
             log.info("Executor service is shutdown");
             log.info("Total playback time duration: {} milliseconds", playbackLength.get());
             log.info("Total frames processed: {}", this.frames.size());
-            updateFramePlaybackTimestamps(framesForEachTask);
+            updateFramePlaybackTimestamps(framesForEachTask, playbackLength, frames.size());
         }
     }
 
     /* Create N time stamp ranges so that each of the N threads can call ListFragments on a specified partition */
-    public List<TimestampRange> partitionTimeRange(TimestampRange timestampRange) throws ParseException{
-        List<TimestampRange> timestampRanges= new ArrayList<>();
+    public List<TimestampRange> partitionTimeRange(TimestampRange timestampRange) throws ParseException {
+        List<TimestampRange> timestampRanges = new ArrayList<>();
 
 
         Date startDate = timestampRange.getStartTimestamp();
@@ -142,40 +143,43 @@ public class GetArchivedMedia extends KinesisVideoCommon {
         return timestampRanges;
     }
 
-    private void updateFramePlaybackTimestamps(List<Future<List<JpaFrame>>> framesForEachTask) throws ExecutionException, InterruptedException {
-        Date startDate = timestampRange.getStartTimestamp();
-        Date endDate = timestampRange.getEndTimestamp();
-        DateFormat df = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
-
-        long timespan = (endDate.getTime() - startDate.getTime());
-        long msStartTimestamp = startDate.getTime();
-        long timePerTask = timespan / tasks;
+    private void updateFramePlaybackTimestamps(List<Future<List<JpaFrame>>> framesForEachTask, AtomicLong playbackLength, long numFrames) throws ExecutionException, InterruptedException {
+        long timespan = playbackLength.get();
+        long msStartTimestamp = 0;
+        long timePerFrame = timespan / numFrames;
         long frameCount = 0;
 
-        for (Future<List<JpaFrame>> listFuture: framesForEachTask) {
+        for (Future<List<JpaFrame>> listFuture : framesForEachTask) {
             List<JpaFrame> framesForTask = listFuture.get();
-            long framesPerTask = (long)framesForTask.size();
+            long framesPerTask = (long) framesForTask.size();
 
             if (framesPerTask > 0) {
-                long timePerFrame = timePerTask / framesPerTask;
-                //log.info("Time for each frame is {} ", timePerFrame);
 
                 for (JpaFrame f : framesForTask) {
                     long timeAfterStart = timePerFrame * frameCount;
+                    long frameTimestampInMs = timeAfterStart + msStartTimestamp;
+                    String frameTimestamp = convertMillisecondsToTimestamp(frameTimestampInMs);
 
-                    Date frameDate = new Date(timeAfterStart + msStartTimestamp);
-                    this.frames.get(f).setPlaybackTimestamp(df.format(frameDate));
+                    this.frames.get(f).setPlaybackTimestampAndFrameNum(frameTimestamp, frameCount);
 
-                    for (String label: f.getLabels()) {
-                        this.labelToTimestamps.get(label).addTimestamp(df.format(frameDate));
-                        this.labelToTimestamps.get(label).addTimestampAndFrame(df.format(frameDate), f);
+                    for (String label : f.getLabels()) {
+                        this.labelToTimestamps.get(label).addTimestamp(frameTimestamp);
+                        this.labelToTimestamps.get(label).addTimestampAndFrame(frameTimestamp, f);
                     }
-
                     frameCount++;
                 }
             }
         }
+    }
 
+    private String convertMillisecondsToTimestamp(long millis) {
+        String timestamp = String.format("%02d:%02d:%02d",
+                TimeUnit.MILLISECONDS.toHours(millis),
+                TimeUnit.MILLISECONDS.toMinutes(millis) -
+                        TimeUnit.HOURS.toMinutes(TimeUnit.MILLISECONDS.toHours(millis)), // The change is in this line
+                TimeUnit.MILLISECONDS.toSeconds(millis) -
+                        TimeUnit.MINUTES.toSeconds(TimeUnit.MILLISECONDS.toMinutes(millis)));
+        return timestamp;
     }
 
     private String getListFragmentsEndpoint(String streamName) {

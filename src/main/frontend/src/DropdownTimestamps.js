@@ -5,7 +5,6 @@ const DropdownTimestamp = (props) => {
 
     const timestampsDisplaying = props.timestampsDisplaying;
     var isShowingTimestamps = timestampsDisplaying[props.index];
-    const label = props.labels[props.index];
 
     return (
         <React.Fragment>
@@ -18,7 +17,6 @@ const DropdownTimestamp = (props) => {
             ))}</div> : null}
         </React.Fragment>
     )
-
 }
 
 export default DropdownTimestamp;

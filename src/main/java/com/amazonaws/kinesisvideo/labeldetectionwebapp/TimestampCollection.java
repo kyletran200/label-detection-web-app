@@ -3,7 +3,6 @@ package com.amazonaws.kinesisvideo.labeldetectionwebapp;
 import lombok.Data;
 import org.hibernate.annotations.LazyCollection;
 import org.hibernate.annotations.LazyCollectionOption;
-import org.springframework.data.jpa.repository.JpaRepository;
 
 import javax.persistence.*;
 import java.util.*;
@@ -12,7 +11,8 @@ import java.util.*;
 @Entity
 public class TimestampCollection {
 
-    @Id @GeneratedValue
+    @Id
+    @GeneratedValue
     private Long id;
 
     @ElementCollection
@@ -25,7 +25,8 @@ public class TimestampCollection {
     @LazyCollection(LazyCollectionOption.FALSE)
     private Map<String, JpaFrame> timestampToFrame = new HashMap<>();
 
-    public TimestampCollection() {}
+    public TimestampCollection() {
+    }
 
     public List<String> getTimestamps() {
         return this.timestamps;

@@ -8,7 +8,6 @@ import java.util.concurrent.ExecutionException;
 
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.kinesisvideo.labeldetectionwebapp.exceptions.ArchivedVideoStreamNotFoundException;
-import com.amazonaws.kinesisvideo.labeldetectionwebapp.kvsservices.ArchivedVideoStream;
 import com.amazonaws.kinesisvideo.labeldetectionwebapp.kvsservices.GetArchivedMedia;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.kinesisvideo.model.*;
@@ -28,7 +27,9 @@ public class ArchivedVideoStreamController {
     }
 
     @GetMapping("/streams")
-    List<ArchivedVideoStream> all() { return archivedVideoStreamsRepository.findAll(); }
+    List<ArchivedVideoStream> all() {
+        return archivedVideoStreamsRepository.findAll();
+    }
 
     @PostMapping("/streams")
     ArchivedVideoStream archivedVideoStream(@RequestBody ArchivedVideoStream newArchivedVideoStream) {
@@ -45,9 +46,10 @@ public class ArchivedVideoStreamController {
         ArchivedVideoStream streamToUpdate = archivedVideoStreamsRepository.findById(id)
                 .orElseThrow(() -> new ArchivedVideoStreamNotFoundException(id));
 
-        log.info("Performing Get Media on Archived Stream: {}", streamToUpdate.getName());
+        log.info("Retrieving stream data: {}", streamToUpdate.getName());
 
-        if (streamToUpdate.getLabels().size() == 0) {
+        if (streamToUpdate.getFrames().size() == 0 && streamToUpdate.getLabelToTimestamps().size() == 0) {
+            log.info("Peforming GetMedia on archived stream");
             String startTimestamp = streamToUpdate.getStartTimestamp();
             String endTimestamp = streamToUpdate.getEndTimestamp();
             String streamName = streamToUpdate.getName();
@@ -65,7 +67,8 @@ public class ArchivedVideoStreamController {
 
             long timeDuration = timestampRange.getEndTimestamp().getTime() - timestampRange.getStartTimestamp().getTime();
             int tasks = (int) timeDuration / 10000;
-            log.info("Starting processing with {} tasks and {} threads on {}", tasks, threads, streamName);
+            tasks = Math.max(tasks, threads);
+            log.info("Starting processing with {} tasks and {} threads on {} from {} to {}", tasks, threads, streamName, startTimestamp, endTimestamp);
 
             GetArchivedMedia getArchivedMedia = GetArchivedMedia.builder()
                     .region(Regions.US_WEST_2)
@@ -79,15 +82,12 @@ public class ArchivedVideoStreamController {
 
             getArchivedMedia.execute();
 
-            for (String label : getArchivedMedia.getLabels()) {
-                streamToUpdate.addLabel(label);
-            }
-
             getArchivedMedia.getLabelToTimestamps().forEach((k, v) -> streamToUpdate.addLabelAndTimestampCollection(k, v));
             getArchivedMedia.getFrames().forEach((k, v) -> streamToUpdate.addFrame(k));
 
             streamToUpdate.sortFrames();
             archivedVideoStreamsRepository.save(streamToUpdate);
+            log.info("Saved stream {} with {} frames and {} labels", streamToUpdate.getName(), streamToUpdate.getFrames().size(), streamToUpdate.getLabelToTimestamps().size());
         }
         return streamToUpdate;
     }

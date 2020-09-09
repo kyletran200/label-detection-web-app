@@ -29,6 +29,7 @@ import javax.imageio.ImageIO;
 @Slf4j
 public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
 
+    private final AmazonRekognition rekognitionClient = AmazonRekognitionClientBuilder.defaultClient();
     private final int sampleRate;
     private Set<String> labels;
     private Map<JpaFrame, JpaFrame> frames;
@@ -52,24 +53,22 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
                         Optional<FragmentMetadataVisitor.MkvTagProcessor> tagProcessor) throws FrameProcessException {
 
         BufferedImage bufferedImage = decodeH264Frame(frame, trackMetadata);
-        //log.info("Frame timecode is {}", frame.getTimeCode());
 
         /* Only send key frames to Rekognition */
         if (sampleRate == 0) {
             if (frame.isKeyFrame()) {
-                saveFrame(bufferedImage, frameNumber);
+                saveFrame(bufferedImage);
             }
-        }
-        else {
+        } else {
             /* Only send to Rekognition every N frames */
             if ((frameNumber % sampleRate) == 0) {
-                saveFrame(bufferedImage, frameNumber);
+                saveFrame(bufferedImage);
             }
             frameNumber++;
         }
     }
 
-    public void saveFrame(final BufferedImage bufferedImage, long frameNumber) {
+    public void saveFrame(final BufferedImage bufferedImage) {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
         try {
@@ -78,13 +77,13 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
             List<BoundingBox> boundingBoxes = new ArrayList<>();
             List<String> labelsInFrame = sendToRekognition(imageBytes, bufferedImage, boundingBoxes);
 
-            for (BoundingBox boundingBox: boundingBoxes) {
+            for (BoundingBox boundingBox : boundingBoxes) {
                 addBoundingBoxToImage(bufferedImage, boundingBox);
             }
             byte[] boundingBoxImageByteArray = toByteArrayAutoClosable(bufferedImage, "png");
-            JpaFrame jpaFrameToSave = new JpaFrame(boundingBoxImageByteArray, frameNumber);
+            JpaFrame jpaFrameToSave = new JpaFrame(boundingBoxImageByteArray);
 
-            for (String label: labelsInFrame) {
+            for (String label : labelsInFrame) {
                 jpaFrameToSave.addLabel(label);
                 this.labelToTimestamps.get(label).addFrame(jpaFrameToSave);
             }
@@ -92,15 +91,13 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
             this.frames.put(jpaFrameToSave, jpaFrameToSave);
             this.framesInTask.add(jpaFrameToSave);
 
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
             log.warn("Error with png conversion", e);
             System.out.println("Error with byte buffer conversion");
         }
     }
 
     public List<String> sendToRekognition(ByteBuffer imageBytes, BufferedImage bufferedImage, List<BoundingBox> boundingBoxes) {
-        AmazonRekognition rekognitionClient = AmazonRekognitionClientBuilder.defaultClient();
         List<String> labelsInFrame = new ArrayList<>();
 
         DetectLabelsRequest request = new DetectLabelsRequest()
@@ -116,7 +113,7 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
             int height = bufferedImage.getHeight();
 
             log.info("Detected Labels:");
-            for (Label label: labels) {
+            for (Label label : labels) {
                 log.info(label.getName() + ": " + label.getConfidence().toString());
                 this.labels.add(label.getName());
                 this.labelToTimestamps.putIfAbsent(label.getName(), new TimestampCollection());
@@ -124,8 +121,8 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
             }
             log.info("----------------------");
 
-            for (Label label: labels) {
-                for (Instance instance: label.getInstances()) {
+            for (Label label : labels) {
+                for (Instance instance : label.getInstances()) {
                     boundingBoxes.add(instance.getBoundingBox());
                     final int left = (int) (instance.getBoundingBox().getLeft() * width);
                     final int top = (int) (instance.getBoundingBox().getTop() * height);
@@ -157,13 +154,13 @@ public class H264ImageDetectionBoundingBoxSaver extends H264FrameDecoder {
     }
 
     private static byte[] toByteArrayAutoClosable(BufferedImage image, String type) throws IOException {
-        try (ByteArrayOutputStream out = new ByteArrayOutputStream()){
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             ImageIO.write(image, type, out);
             return out.toByteArray();
         }
     }
 
-    public List<JpaFrame> getFramesInTask () {
+    public List<JpaFrame> getFramesInTask() {
         return this.framesInTask;
     }
 

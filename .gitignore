@@ -31,3 +31,12 @@ build/
 
 ### VS Code ###
 .vscode/
+
+dependency-reduced-pom.xm
+
+# Mac
+.DS_Store
+
+# Maven
+log/
+target/

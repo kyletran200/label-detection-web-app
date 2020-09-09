@@ -11,7 +11,6 @@ const ControlledCarousel = (props) => {
     };
 
     const frames = props.frames;
-    //console.log(props.index);
 
     return (
         <Carousel activeIndex={props.index} onSelect={handleSelect}>

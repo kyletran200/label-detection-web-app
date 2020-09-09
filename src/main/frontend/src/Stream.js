@@ -9,7 +9,7 @@ import DropdownTimestamps from "./DropdownTimestamps";
 import "./styles.css";
 
 const Stream = () => {
-    let {id} = useParams();
+    let {id} = useParams(); 
     const [Stream, setStream] = useState([]);
     const [loading, setLoading] = useState(false);
 
@@ -22,32 +22,25 @@ const Stream = () => {
         setLoading(true);
         axios.get("http://localhost:8080/streams/" + id).then(res => {
           console.log(res);
+          console.log(res.data.length);
           setStream(res.data);
           setLoading(false);
         });
       } catch (err) {
         console.log(err);
+        console.log("Failed to fetch stream info");
         setLoading(false);
       } 
     };
-  
+
+
     useEffect(() => {
       fetchStreamInfo();
     }, []);
   
-    var settings = {
-      dots: true,
-      infinite: true,
-      speed: 500,
-      slidesToShow: 1,
-      slidesToScroll: 1,
-      arrows: true,
-    };
-  
-    //var labels = Stream.labels;
     var frames = Stream.frames; 
-    var timestamps;
     var labelToTimestamps = Stream.labelToTimestamps;
+    var timestamps;
     var labels;
     var timestampCollections;
 
@@ -67,11 +60,7 @@ const Stream = () => {
     if (frames) {
       timestamps = frames.map(frame => frame.playbackTimestamp);
     }
-    //console.log(TimestampsDisplaying);
-    //console.log(labels);
-    //console.log(timestampCollections);
-    //console.log(labelToTimestamps);
-  
+
     const handleLabelSelect = (index) => {
       let newArr = Array(TimestampsDisplaying.length).fill(false);
       newArr[index] = true;

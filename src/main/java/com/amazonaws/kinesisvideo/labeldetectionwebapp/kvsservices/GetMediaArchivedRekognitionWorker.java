@@ -23,7 +23,6 @@ import com.amazonaws.services.kinesisvideo.model.*;
 
 import lombok.extern.slf4j.Slf4j;
 
-/* This worker retrieves all fragments within the specified Time Range from a specified Kinesis Video Stream and puts them in a list */
 
 @Slf4j
 public class GetMediaArchivedRekognitionWorker extends KinesisVideoCommon implements Callable {
@@ -73,8 +72,7 @@ public class GetMediaArchivedRekognitionWorker extends KinesisVideoCommon implem
                                                            final H264ImageDetectionBoundingBoxSaver h264ImageDetectionBoundingBoxSaver,
                                                            final String listFragmentsEndpoint,
                                                            final String getMediaForFragmentListEndpoint,
-                                                           final AtomicLong playbackLength)
-    {
+                                                           final AtomicLong playbackLength) {
 
         return new GetMediaArchivedRekognitionWorker(
                 streamName, awsCredentialsProvider, listFragmentsEndpoint, getMediaForFragmentListEndpoint, region, fragmentSelector, elementVisitor, h264ImageDetectionBoundingBoxSaver, playbackLength);
@@ -101,7 +99,7 @@ public class GetMediaArchivedRekognitionWorker extends KinesisVideoCommon implem
 
 
             List<String> fragmentNumbers = new ArrayList<>();
-            for (Fragment f: listFragmentsResult.getFragments()) {
+            for (Fragment f : listFragmentsResult.getFragments()) {
                 fragmentNumbers.add(f.getFragmentNumber());
                 playbackLength.addAndGet(f.getFragmentLengthInMilliseconds());
             }
@@ -114,7 +112,7 @@ public class GetMediaArchivedRekognitionWorker extends KinesisVideoCommon implem
                         .withStreamName(streamName).withNextToken(nextToken);
                 listFragmentsResult = amazonKinesisVideoArchivedMediaListFragments.listFragments(listFragmentsRequest);
 
-                for (Fragment f: listFragmentsResult.getFragments()) {
+                for (Fragment f : listFragmentsResult.getFragments()) {
                     fragmentNumbers.add(f.getFragmentNumber());
                 }
                 nextToken = listFragmentsResult.getNextToken();
